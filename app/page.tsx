@@ -11,17 +11,32 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
+  const [dbNotice, setDbNotice] = useState<string | null>(null);
+  const [seedNotice, setSeedNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const { addToCart } = useStore();
 
   const loadProducts = () => {
     setLoading(true);
     fetch(`/api/products?search=${encodeURIComponent(search)}`)
-      .then((r) => r.json())
+      .then((r) => {
+        const dbStatus = r.headers.get('X-DB-Status');
+        const dbErr = r.headers.get('X-DB-Error');
+        if (dbStatus === 'fallback') {
+          setDbNotice(
+            decodeURIComponent(dbErr || 'Database offline. Displaying local demo catalog.')
+          );
+        } else {
+          setDbNotice(null);
+        }
+        return r.json();
+      })
       .then((data) => {
         setProducts(Array.isArray(data) ? data : []);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -30,11 +45,21 @@ export default function Home() {
 
   const handleSeed = async () => {
     setSeeding(true);
+    setSeedNotice(null);
     try {
       const res = await fetch('/api/seed', { method: 'POST' });
+      const data = await res.json();
       if (res.ok) {
+        setSeedNotice({ type: 'success', text: data.message || 'Seeded successfully!' });
         await loadProducts();
+      } else {
+        setSeedNotice({
+          type: 'error',
+          text: data.error + (data.hint ? ` — ${data.hint}` : ''),
+        });
       }
+    } catch {
+      setSeedNotice({ type: 'error', text: 'Network request failed. Check server logs.' });
     } finally {
       setSeeding(false);
     }
@@ -50,6 +75,22 @@ export default function Home() {
 
   return (
     <main className="container">
+      {/* Vercel Database Connection Notice if applicable */}
+      {dbNotice && (
+        <div className="alert alert-warning" style={{ fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+          <strong>ℹ️ Notice for Vercel Deployment:</strong> {dbNotice}
+          <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', color: '#78350f' }}>
+            To enable full persistence on Vercel, go to <strong>Vercel Dashboard &gt; Settings &gt; Environment Variables</strong> and add <code>MONGODB_URI</code> (MongoDB Atlas connection string).
+          </div>
+        </div>
+      )}
+
+      {seedNotice && (
+        <div className={`alert ${seedNotice.type === 'success' ? 'alert-success' : 'alert-error'}`}>
+          {seedNotice.text}
+        </div>
+      )}
+
       {/* Hero Banner */}
       <section className="hero-banner">
         <div className="hero-content">
@@ -105,7 +146,7 @@ export default function Home() {
           <h3>No products found</h3>
           <p className="text-muted">
             {products.length === 0
-              ? 'Your store catalog is currently empty. Would you like to populate sample products?'
+              ? 'Your store catalog is currently empty. Click below to populate demo products.'
               : 'No items match your current filter or search criteria.'}
           </p>
           {products.length === 0 && (

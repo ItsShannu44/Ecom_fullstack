@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { connectDB } from './db';
 import User from '@/models/User';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET || 'college-assignment-secure-jwt-key-991827';
 const COOKIE = 'token';
 
 export function signToken(payload: { id: string; role: string }) {
